@@ -1,10 +1,10 @@
 import logging
 import os
 import time
-
 import requests
 import telegram
 from dotenv import load_dotenv
+import http
 
 load_dotenv()
 
@@ -57,10 +57,15 @@ def check_tokens():
 
 def send_message(bot, message):
     """Функция отправляет сообщение в Telegram чат."""
-    bot.send_message(
-        chat_id=TELEGRAM_CHAT_ID,
-        text=message
-    )
+    try:
+        bot.send_message(
+            chat_id=TELEGRAM_CHAT_ID,
+            text=message
+        )
+        logging.debug('Успешная отправке сообщения в Telegram')
+    except Exception:
+        logging.error('Ошибка отправки сообщения в Telegram')
+        raise Exception
 
 
 def get_api_answer(timestamp):
@@ -68,50 +73,55 @@ def get_api_answer(timestamp):
     Функция делает запрос к эндпоинту API и роверяет статус ответа.
     Возвращает response.
     """
-    url = ENDPOINT
-    headers = HEADERS
-    payload = {'from_date': timestamp}
-    homework_statuses = requests.get(
-        url,
-        headers=headers,
-        params=payload
-    )
-    if homework_statuses.status_code == 200:
-        response = homework_statuses.json()
-        return response
-    else:
-        logging.error(
-            f'Сбой в работе программы: Эндпоинт {ENDPOINT} недоступен. '
-            f'Код ответа API: {homework_statuses.status_code}'
+    try:
+        payload = {'from_date': timestamp}
+        response = requests.get(
+            ENDPOINT,
+            headers=HEADERS,
+            params=payload
         )
+        if response.status_code != http.HTTPStatus.OK:
+            logging.error(
+                f'Сбой в работе программы: Эндпоинт {ENDPOINT} недоступен.'
+                f'Код ответа API: {response.status_code}'
+            )
+            raise Exception(f'Код ответа API: {response.status_code}')
+        response = response.json()
+    except requests.RequestException():
+        raise Exception
+    return response
 
 
 def check_response(response):
     """Проверяет ответ API на соответствие документации."""
-    if "homeworks" and "current_date" not in response:
-        raise Exception('В response нет ключа homeworks '
-                        'или ключа current_date')
+    if "homeworks" in response:
+        if type(response) is not dict:
+            raise TypeError
+        if type(response["homeworks"]) is not list:
+            raise TypeError
+    raise Exception('В response нет ключа homeworks '
+                    'или ключа current_date')
 
 
 def parse_status(homework):
     """Извлекает статус о конкретной домашней работе."""
-    verdict = homework['homeworks'][0]['status']
-    if verdict in HOMEWORK_VERDICTS:
-        homework_name = homework[
-            'homeworks'
-        ][0]['homework_name'].replace(
+    try:
+        verdict = homework['status']
+        homework_name = homework['homework_name'].replace(
             'username__', ''
         ).replace(
             '.zip', ''
         )
-
         return (
             f'Изменился статус проверки работы "{homework_name}". '
             f'{HOMEWORK_VERDICTS[verdict]}', verdict
         )
-    else:
-        logging.error('Неожиданный статус домашней работы, '
-                      'обнаруженный в ответе API')
+    except KeyError:
+        logging.error("Неожиданный статус домашней работы, обнаруженный в ответе API")
+        raise Exception
+    except ValueError:
+        logging.error("Неожиданный статус домашней работы, обнаруженный в ответе API")
+        raise Exception
 
 
 def main():
@@ -130,9 +140,7 @@ def main():
             if verdict != answer:
                 answer = verdict
                 send_message(bot, message)
-                logging.debug(
-                    f'Сообщение с {message} отправлено в Telegram'
-                )
+
                 time.sleep(RETRY_PERIOD)
             else:
                 logging.debug('Отсутствие в ответе новых статусов')
