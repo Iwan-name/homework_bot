@@ -65,8 +65,8 @@ def send_message(bot, message):
 
 def get_api_answer(timestamp):
     """
-    Функция делает запрос к эндпоинту API, проверяет статус ответа
-    и возвращает response.
+    Функция делает запрос к эндпоинту API и роверяет статус ответа.
+    Возвращает response.
     """
     url = ENDPOINT
     headers = HEADERS
@@ -95,8 +95,7 @@ def check_response(response):
 
 def parse_status(homework):
     """
-    Извлекает из информации о конкретной
-    домашней работе статус этой работы.
+    Извлекает статус о конкретной домашней работе.
     """
     verdict = homework['homeworks'][0]['status']
     if verdict in HOMEWORK_VERDICTS:
