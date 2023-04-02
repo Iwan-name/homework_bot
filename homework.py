@@ -94,9 +94,7 @@ def check_response(response):
 
 
 def parse_status(homework):
-    """
-    Извлекает статус о конкретной домашней работе.
-    """
+    """Извлекает статус о конкретной домашней работе."""
     verdict = homework['homeworks'][0]['status']
     if verdict in HOMEWORK_VERDICTS:
         homework_name = homework[
