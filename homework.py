@@ -6,6 +6,8 @@ import telegram
 from dotenv import load_dotenv
 import http
 
+from exceptions import EnvironmentVariablesException
+
 load_dotenv()
 
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
@@ -38,21 +40,21 @@ def check_tokens():
             'окружения: PRACTICUM_TOKEN  Программа '
             'принудительно остановлена.'
         )
-        raise Exception('Практикум токен == None')
+        raise EnvironmentVariablesException('PRACTICUM_TOKEN')
     if TELEGRAM_TOKEN is None:
         logging.critical(
             'Отсутствует обязательная переменная '
             'окружения: TELEGRAM_TOKEN Программа '
             'принудительно остановлена.'
         )
-        raise Exception('Телеграмм токен == None')
+        raise EnvironmentVariablesException('TELEGRAM_TOKEN')
     if TELEGRAM_CHAT_ID is None:
         logging.critical(
             'Отсутствует обязательная переменная '
             'окружения: TELEGRAM_CHAT_ID Программа '
             'принудительно остановлена.'
         )
-        raise Exception('Телеграм чат id == None')
+        raise EnvironmentVariablesException('TELEGRAM_CHAT_ID')
 
 
 def send_message(bot, message):
@@ -65,7 +67,7 @@ def send_message(bot, message):
         logging.debug('Успешная отправке сообщения в Telegram')
     except Exception:
         logging.error('Ошибка отправки сообщения в Telegram')
-        raise Exception
+        raise Exception('Ошибка отправки сообщения в Telegram')
 
 
 def get_api_answer(timestamp):
@@ -88,22 +90,24 @@ def get_api_answer(timestamp):
             raise Exception(f'Код ответа API: {response.status_code}')
         response = response.json()
     except requests.RequestException():
-        raise Exception
+        raise requests.RequestException()
     return response
 
 
 def check_response(response):
     """Проверяет ответ API на соответствие документации."""
+    if 'current_date' not in response:
+        raise TypeError
     if "homeworks" in response:
         if type(response) is not dict:
             raise TypeError
         if type(response["homeworks"]) is not list:
             raise TypeError
-    raise Exception('В response нет ключа homeworks '
-                    'или ключа current_date')
+    else:
+        raise TypeError
 
 
-def parse_status(homework):
+def parse_status(homework) -> str:
     """Извлекает статус о конкретной домашней работе."""
     try:
         verdict = homework['status']
@@ -114,13 +118,17 @@ def parse_status(homework):
         )
         return (
             f'Изменился статус проверки работы "{homework_name}". '
-            f'{HOMEWORK_VERDICTS[verdict]}', verdict
+            f'{HOMEWORK_VERDICTS[verdict]}'
         )
     except KeyError:
-        logging.error("Неожиданный статус домашней работы, обнаруженный в ответе API")
+        logging.error(
+            "Неожиданный статус домашней работы, обнаруженный в ответе API"
+        )
         raise Exception
     except ValueError:
-        logging.error("Неожиданный статус домашней работы, обнаруженный в ответе API")
+        logging.error(
+            "Неожиданный статус домашней работы, обнаруженный в ответе API"
+        )
         raise Exception
 
 
@@ -135,16 +143,15 @@ def main():
         try:
             response = get_api_answer(timestamp)
             check_response(response)
-            message, verdict = parse_status(response)
-
-            if verdict != answer:
-                answer = verdict
-                send_message(bot, message)
-
-                time.sleep(RETRY_PERIOD)
-            else:
-                logging.debug('Отсутствие в ответе новых статусов')
-                time.sleep(RETRY_PERIOD)
+            if len(response['homeworks']) != 0:
+                verdict = response['homeworks'][0]['status']
+                message = parse_status(response['homeworks'][0])
+                if verdict != answer:
+                    answer = verdict
+                    send_message(bot, message)
+                else:
+                    logging.debug('Отсутствие в ответе новых статусов')
+            time.sleep(RETRY_PERIOD)
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
