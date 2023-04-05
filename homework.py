@@ -1,3 +1,4 @@
+import http
 import logging
 import os
 import time
@@ -6,9 +7,6 @@ from logging.handlers import RotatingFileHandler
 import requests
 import telegram
 from dotenv import load_dotenv
-import http
-
-from exceptions import EnvironmentVariablesException
 
 load_dotenv()
 
@@ -43,7 +41,7 @@ handler = RotatingFileHandler(
 logger.addHandler(handler)
 
 
-def check_tokens():
+def check_tokens() -> bool:
     """Функция проверяет доступность переменных окружения."""
     tokens = {'PRACTICUM_TOKEN': PRACTICUM_TOKEN,
               'TELEGRAM_TOKEN': TELEGRAM_TOKEN,
@@ -51,12 +49,9 @@ def check_tokens():
               }
     for key, value in tokens.items():
         if value is None:
-            logger.critical(
-                'Отсутствует обязательная переменная '
-                f'окружения: {key}.Программа '
-                'принудительно остановлена.'
-            )
-            raise EnvironmentVariablesException(f'{key}')
+            return False
+        else:
+            return True
 
 
 def send_message(bot, message):
@@ -103,7 +98,9 @@ def check_response(response):
     """Проверяет ответ API на соответствие документации."""
     if not isinstance(response, dict):
         raise TypeError
-    if 'current_date' and 'homeworks' not in response:
+    if 'current_date' not in response:
+        raise TypeError
+    if 'homeworks' not in response:
         raise TypeError
     if not isinstance(response['homeworks'], list):
         raise TypeError
@@ -111,8 +108,12 @@ def check_response(response):
 
 def parse_status(homework) -> str:
     """Извлекает статус о конкретной домашней работе."""
+    if not isinstance(homework, dict):
+        raise TypeError
     if 'homework_name' not in homework:
         raise KeyError('В ответе API домашки нет ключа homework_name')
+    if 'status' not in homework:
+        raise KeyError('В ответе API домашки нет ключа status')
     verdict = homework['status']
     if verdict not in HOMEWORK_VERDICTS:
         raise KeyError('API домашки возвращает недокументированный '
@@ -130,7 +131,7 @@ def parse_status(homework) -> str:
 
 def main():
     """Основная логика работы бота."""
-    if check_tokens():
+    if not check_tokens():
         logger.critical('Ошибка при проверки '
                         'доступность переменных окружения')
         raise Exception('Ошибка при проверки '
