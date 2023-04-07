@@ -50,8 +50,7 @@ def check_tokens() -> bool:
     for key, value in tokens.items():
         if value is None:
             return False
-    else:
-        return True
+    return True
 
 
 def send_message(bot, message):
